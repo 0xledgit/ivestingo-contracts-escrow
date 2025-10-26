@@ -19,8 +19,8 @@ contract EscrowFactory {
         uint256 totalAmount
     );
 
-    constructor() {
-        admin = msg.sender;
+    constructor(address _admin) {
+        admin = _admin;
         escrowImplementation = address(new Escrow());
     }
 
@@ -40,6 +40,7 @@ contract EscrowFactory {
             _addressPyme,
             _addressBaseToken,
             _addressExpert,
+            admin,
             _totalMilestonesAmount,
             _milestoneDescriptions,
             _milestoneAmounts,

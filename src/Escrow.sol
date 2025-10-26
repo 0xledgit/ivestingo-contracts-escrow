@@ -31,6 +31,7 @@ function initialize(
     address _addressPyme,
     address _addressBaseToken,
     address _addressExpert,
+    address _addressAdmin,
     uint256 _totalMilestonesAmount,
     string[] memory _milestoneDescriptions,
     uint256[] memory _milestoneAmounts,
@@ -48,7 +49,7 @@ function initialize(
     addressPyme = _addressPyme;
     addressBaseToken = _addressBaseToken;
     addressExpert = _addressExpert;
-    addressAdmin = msg.sender;
+    addressAdmin = _addressAdmin;
     totalMilestonesAmount = _totalMilestonesAmount;
     totalMilestones = _milestoneDescriptions.length;
     revisionPeriod = _revisionPeriod;
@@ -69,12 +70,17 @@ function initialize(
     status = EscrowStatus.Created;
 
     emit EscrowCreated(_addressPyme, _addressExpert, _totalMilestonesAmount);
+}
 
-    bool success = IERC20(_addressBaseToken).transferFrom(_addressPyme, address(this), _totalMilestonesAmount);
+function fund() public {
+    require(msg.sender == addressPyme, "Only pyme");
+    require(status == EscrowStatus.Created, "Not in created state");
+
+    bool success = IERC20(addressBaseToken).transferFrom(addressPyme, address(this), totalMilestonesAmount);
     require(success, "Transfer failed");
 
     status = EscrowStatus.Funded;
-    emit EscrowFunded(_addressPyme, _totalMilestonesAmount);
+    emit EscrowFunded(addressPyme, totalMilestonesAmount);
 }
 
 function acceptContract() public {
