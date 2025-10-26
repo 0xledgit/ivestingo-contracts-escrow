@@ -37,6 +37,7 @@ interface EscrowInterface {
         address _addressPyme,
         address _addressBaseToken,
         address _addressExpert,
+        address _addressAdmin,
         uint256 _totalMilestonesAmount,
         string[] memory _milestoneDescriptions,
         uint256[] memory _milestoneAmounts,
@@ -44,6 +45,7 @@ interface EscrowInterface {
         uint256 _platformFee
     ) external;
 
+    function fund() external;
     function acceptContract() external;
     function deliverMilestone() external;
     function approveMilestone() external;
