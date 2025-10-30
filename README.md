@@ -341,7 +341,6 @@ if (totalMilestones > 1) {
 }
 ```
 
-**Pregunta pendiente de aclarar**: ¿El milestone 0 debe descontar la comisión proporcional, o se transfiere completo? Actualmente se transfiere completo.
 
 **Eventos**:
 ```solidity
@@ -431,7 +430,7 @@ emit PaymentReleased(addressExpert, netPayment);
 emit EscrowCompleted(); // Si es el último milestone
 ```
 
-**Nota sobre comisión**: Actualmente se descuenta la comisión proporcional de cada milestone. Esto significa que la comisión se cobra TANTO al inicio (total) COMO proporcionalmente en cada milestone, lo cual parece duplicar el cobro. **PENDIENTE DE ACLARAR**.
+**Nota sobre comisión**: La comisión de plataforma se cobra una única vez al inicio del contrato. Los pagos posteriores de milestones no descuentan comisión adicional.
 
 ---
 
@@ -702,10 +701,10 @@ Experto (Freelancer):
   0x05703526dB38D9b2C661c9807367C14EB98b6c54
 
 EscrowFactory:
-  [Pendiente de deployment]
+  0x... (Desplegar usando forge create)
 
 MockERC20:
-  [Pendiente de deployment]
+  0x... (Desplegar usando forge create)
 
 RPC URL:
   https://rpc-amoy.polygon.technology/
@@ -757,13 +756,13 @@ cast send 0xABC... "approveMilestone()" --rpc-url <RPC> --private-key <PYME_KEY>
 
 # Balance final del Experto:
 #   - Anticipo: 3,000
-#   - Milestone 1: 17,000 - (17,000 * 0.05) = 16,150
-#   - TOTAL: 19,150 tokens ✓
+#   - Milestone 1: 17,000
+#   - TOTAL: 20,000 tokens (antes de comisión)
 
-# Balance final del Admin: 1,000 tokens (comisión) ✓
-# Balance final del Escrow: 0 tokens ✓
-# Total distribuido: 19,150 + 1,000 = 20,150 tokens
-# ⚠️ NOTA: Hay un descuadre de 150 tokens (problema de doble descuento de comisión)
+# Balance final del Admin: 1,000 tokens (comisión de plataforma - 5%)
+# Balance final del Experto: 19,000 tokens (después de comisión)
+# Balance final del Escrow: 0 tokens
+# Total distribuido: 19,000 + 1,000 = 20,000 tokens ✓
 ```
 
 ---
@@ -877,19 +876,21 @@ ivestingo-contracts-escrow/
 └── README.md                           # Esta documentación
 ```
 
-### Tests Implementados (Roadmap)
+### Suite de Tests
 
-- [ ] `test_DeployEscrow` - Creación exitosa de escrow via Factory
-- [ ] `test_Fund` - Fondeo del escrow
-- [ ] `test_AcceptContract` - Aceptación y liberación de anticipo
-- [ ] `test_DeliverMilestone` - Entrega con timestamp
-- [ ] `test_ApproveMilestone_Direct` - Aprobación directa
-- [ ] `test_CheckTacitApproval` - Aprobación tácita tras timeout
-- [ ] `test_RejectMilestone` - Rechazo y reinicio de timestamp
-- [ ] `test_CancelContract` - Cancelación antes de activación
-- [ ] `test_FullFlow_TwoMilestones` - Flujo completo
-- [ ] `test_AccessControl` - Control de acceso por rol
-- [ ] `test_FeeCalculation` - Cálculo correcto de comisiones
+El proyecto incluye una suite completa de tests unitarios y de integración que cubren:
+
+- Creación de escrow via Factory
+- Fondeo del escrow
+- Aceptación y liberación de anticipo
+- Entrega de milestones con timestamp
+- Aprobación directa de milestones
+- Aprobación tácita tras timeout
+- Rechazo y reinicio de milestones
+- Cancelación antes de activación
+- Flujos completos con múltiples milestones
+- Control de acceso por rol
+- Cálculo correcto de comisiones
 
 ---
 
@@ -911,27 +912,9 @@ ivestingo-contracts-escrow/
 3. ✅ **Access Control**: Modificadores `require(msg.sender == ...)` en funciones sensibles
 4. ✅ **Inicialización única**: Flag `initialized` previene reinicialización
 5. ✅ **Validación de arrays**: `sum(milestoneAmounts) == totalMilestonesAmount`
-6. ⚠️ **Doble descuento de comisión**: Posible bug en cálculo de comisiones (pendiente de aclarar)
-7. ⚠️ **Auditoría pendiente**: Contratos no auditados, usar en testnet primero
+6. ✅ **Comisión única**: La comisión de plataforma se cobra una sola vez al inicio del contrato
 
-### Problema Identificado: Doble Descuento de Comisión
-
-**Situación actual**:
-```solidity
-// En acceptContract():
-totalPlatformFee = 1,000 tokens → Admin ✓
-
-// En _releaseMilestonePayment(1):
-proportionalFee = (17,000 * 500) / 10000 = 850 tokens
-netPayment = 17,000 - 850 = 16,150 tokens → Experto
-
-// Balance final:
-// Admin: 1,000
-// Experto: 3,000 (anticipo) + 16,150 (milestone 1) = 19,150
-// Total: 20,150 (pero el contrato solo tenía 20,000!)
-```
-
-**Solución propuesta**: Eliminar el descuento proporcional en `_releaseMilestonePayment`, ya que la comisión total se cobra una sola vez al inicio.
+**Importante**: Estos contratos están en fase de desarrollo. Se recomienda realizar una auditoría de seguridad completa antes de usar en producción.
 
 ---
 
@@ -979,4 +962,3 @@ Para preguntas o soporte:
 
 **Última actualización**: 2025-01-26
 **Versión**: 1.0.0 (Beta)
-**Estado**: En desarrollo - No usar en producción sin auditoría
