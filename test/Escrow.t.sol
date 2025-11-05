@@ -8,6 +8,57 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract EscrowTest is Base {
 
     // ============================================
+    // INITIALIZATION TESTS
+    // ============================================
+
+    function testInitialize_RevertIfPymeEqualsExpert() public {
+        address sameAddress = makeAddr("sameAddress");
+
+        vm.prank(admin);
+        vm.expectRevert("Pyme and Expert must be different");
+        factory.deployEscrow(
+            sameAddress,
+            address(token),
+            sameAddress,
+            TOTAL_AMOUNT,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
+
+    function testInitialize_RevertIfPymeEqualsAdmin() public {
+        vm.prank(admin);
+        vm.expectRevert("Pyme and Admin must be different");
+        factory.deployEscrow(
+            admin,
+            address(token),
+            expert,
+            TOTAL_AMOUNT,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
+
+    function testInitialize_RevertIfExpertEqualsAdmin() public {
+        vm.prank(admin);
+        vm.expectRevert("Expert and Admin must be different");
+        factory.deployEscrow(
+            pyme,
+            address(token),
+            admin,
+            TOTAL_AMOUNT,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
+
+    // ============================================
     // FUND TESTS
     // ============================================
 

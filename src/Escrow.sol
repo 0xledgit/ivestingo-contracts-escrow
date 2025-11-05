@@ -52,6 +52,9 @@ function initialize(
     require(_addressExpert != address(0), "Invalid expert address");
     require(_addressBaseToken != address(0), "Invalid token address");
     require(_addressAdmin != address(0), "Invalid admin address");
+    require(_addressPyme != _addressExpert, "Pyme and Expert must be different");
+    require(_addressPyme != _addressAdmin, "Pyme and Admin must be different");
+    require(_addressExpert != _addressAdmin, "Expert and Admin must be different");
     require(_milestoneDescriptions.length == _milestoneAmounts.length, "Mismatched arrays");
     require(_milestoneDescriptions.length > 0, "No milestones");
     require(_milestoneDescriptions.length <= ABSOLUTE_MAX_MILESTONES, "Exceeds max milestones");
