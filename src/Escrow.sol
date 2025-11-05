@@ -3,9 +3,11 @@ pragma solidity ^0.8.30;
 
 import "./interfaces/EscrowInterface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract Escrow is EscrowInterface, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     uint256 private constant ABSOLUTE_MAX_MILESTONES = 1000;
 
     EscrowStatus public status;
@@ -85,8 +87,7 @@ function fund() public nonReentrant {
     require(msg.sender == addressPyme, "Only pyme");
     require(status == EscrowStatus.Created, "Not in created state");
 
-    bool success = IERC20(addressBaseToken).transferFrom(addressPyme, address(this), totalMilestonesAmount);
-    require(success, "Transfer failed");
+    IERC20(addressBaseToken).safeTransferFrom(addressPyme, address(this), totalMilestonesAmount);
 
     status = EscrowStatus.Funded;
     emit EscrowFunded(addressPyme, totalMilestonesAmount);
@@ -111,11 +112,8 @@ function acceptContract() public nonReentrant {
         status = EscrowStatus.Completed;
     }
 
-    bool feeTransfer = IERC20(addressBaseToken).transfer(addressAdmin, totalPlatformFee);
-    require(feeTransfer, "Fee transfer failed");
-
-    bool advanceTransfer = IERC20(addressBaseToken).transfer(addressExpert, netPayment);
-    require(advanceTransfer, "Advance transfer failed");
+    IERC20(addressBaseToken).safeTransfer(addressAdmin, totalPlatformFee);
+    IERC20(addressBaseToken).safeTransfer(addressExpert, netPayment);
 
     emit EscrowActivated(addressExpert, netPayment, totalPlatformFee);
     emit PaymentReleased(addressExpert, netPayment);
@@ -186,8 +184,7 @@ function _releaseMilestonePayment(uint256 milestoneId, bool isTacit) private {
         currentMilestone++;
     }
 
-    bool success = IERC20(addressBaseToken).transfer(addressExpert, netPayment);
-    require(success, "Payment transfer failed");
+    IERC20(addressBaseToken).safeTransfer(addressExpert, netPayment);
 
     emit MilestoneApproved(milestoneId, netPayment, isTacit);
     emit PaymentReleased(addressExpert, netPayment);
@@ -217,8 +214,7 @@ function cancelContract() public nonReentrant {
 
     status = EscrowStatus.Cancelled;
 
-    bool success = IERC20(addressBaseToken).transfer(addressPyme, refundAmount);
-    require(success, "Refund failed");
+    IERC20(addressBaseToken).safeTransfer(addressPyme, refundAmount);
 
     emit EscrowCancelled(addressPyme, refundAmount);
 }
