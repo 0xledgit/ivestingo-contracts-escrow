@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import "./interfaces/EscrowInterface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -52,6 +53,10 @@ function initialize(
     require(_addressExpert != address(0), "Invalid expert address");
     require(_addressBaseToken != address(0), "Invalid token address");
     require(_addressAdmin != address(0), "Invalid admin address");
+    require(
+        IERC20Metadata(_addressBaseToken).decimals() == 6,
+        "Token must have exactly 6 decimals"
+    );
     require(_addressPyme != _addressExpert, "Pyme and Expert must be different");
     require(_addressPyme != _addressAdmin, "Pyme and Admin must be different");
     require(_addressExpert != _addressAdmin, "Expert and Admin must be different");
@@ -59,6 +64,10 @@ function initialize(
     require(_milestoneDescriptions.length > 0, "No milestones");
     require(_milestoneDescriptions.length <= ABSOLUTE_MAX_MILESTONES, "Exceeds max milestones");
     require(_platformFee <= 10000, "Fee too high");
+    require(
+        _totalMilestonesAmount % 10000 == 0,
+        "Total amount must be multiple of 10000"
+    );
 
     addressPyme = _addressPyme;
     addressBaseToken = _addressBaseToken;
@@ -72,6 +81,11 @@ function initialize(
 
     uint256 totalCheck = 0;
     for (uint256 i = 0; i < _milestoneDescriptions.length; i++) {
+        require(
+            _milestoneAmounts[i] % 10000 == 0,
+            "Milestone amount must be multiple of 10000"
+        );
+
         milestoneDescriptions[i] = _milestoneDescriptions[i];
         milestoneAmounts[i] = _milestoneAmounts[i];
         milestoneStatuses[i] = MilestoneStatus.InProgress;
