@@ -2,10 +2,158 @@
 pragma solidity ^0.8.30;
 
 import {Base} from "./Base.sol";
+import {Escrow} from "../src/Escrow.sol";
 import {EscrowInterface} from "../src/interfaces/EscrowInterface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MockERC20} from "./Mocks/MockERC20.sol";
 
 contract EscrowTest is Base {
+    // ============================================
+    // INITIALIZATION TESTS
+    // ============================================
+
+    function testInitialize_RevertIfTokenNot6Decimals() public {
+        MockERC20 wrongToken = new MockERC20("Wrong Token", "WRONG");
+
+        vm.mockCall(
+            address(wrongToken),
+            abi.encodeWithSelector(wrongToken.decimals.selector),
+            abi.encode(uint8(18))
+        );
+
+        vm.prank(admin);
+        vm.expectRevert("Token must have exactly 6 decimals");
+        factory.deployEscrow(
+            pyme,
+            address(wrongToken),
+            expert,
+            TOTAL_AMOUNT,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+
+        vm.clearMockedCalls();
+    }
+
+    function testInitialize_RevertIfTotalAmountNotMultipleOf10000() public {
+        uint256 invalidTotal = 10_000_123;
+
+        vm.prank(admin);
+        vm.expectRevert("Total amount must be multiple of 10000");
+        factory.deployEscrow(
+            pyme,
+            address(token),
+            expert,
+            invalidTotal,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
+
+    function testInitialize_RevertIfMilestoneAmountNotMultipleOf10000() public {
+        uint256[] memory invalidMilestones = new uint256[](2);
+        invalidMilestones[0] = 5_000_000;
+        invalidMilestones[1] = 5_000_123;
+
+        string[] memory descriptions = new string[](2);
+        descriptions[0] = "Milestone 1";
+        descriptions[1] = "Milestone 2";
+
+        uint256 validTotal = 10_000_000;
+
+        vm.prank(admin);
+        vm.expectRevert("Milestone amount must be multiple of 10000");
+        factory.deployEscrow(
+            pyme,
+            address(token),
+            expert,
+            validTotal,
+            descriptions,
+            invalidMilestones,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
+
+    function testInitialize_SuccessWithValid2DecimalPrecision() public {
+        uint256[] memory validMilestones = new uint256[](3);
+        validMilestones[0] = 1_234_560_000;
+        validMilestones[1] = 5_432_100_000;
+        validMilestones[2] = 3_333_340_000;
+        uint256 validTotal = 10_000_000_000;
+
+        string[] memory descriptions = new string[](3);
+        descriptions[0] = "M1";
+        descriptions[1] = "M2";
+        descriptions[2] = "M3";
+
+        vm.prank(admin);
+        address escrowAddr = factory.deployEscrow(
+            pyme,
+            address(token),
+            expert,
+            validTotal,
+            descriptions,
+            validMilestones,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+
+        Escrow newEscrow = Escrow(escrowAddr);
+        assertEq(newEscrow.totalMilestonesAmount(), validTotal);
+        assertEq(newEscrow.totalMilestones(), 3);
+    }
+
+    function testInitialize_RevertIfPymeEqualsExpert() public {
+        address sameAddress = makeAddr("sameAddress");
+
+        vm.prank(admin);
+        vm.expectRevert("Pyme and Expert must be different");
+        factory.deployEscrow(
+            sameAddress,
+            address(token),
+            sameAddress,
+            TOTAL_AMOUNT,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
+
+    function testInitialize_RevertIfPymeEqualsAdmin() public {
+        vm.prank(admin);
+        vm.expectRevert("Pyme and Admin must be different");
+        factory.deployEscrow(
+            admin,
+            address(token),
+            expert,
+            TOTAL_AMOUNT,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
+
+    function testInitialize_RevertIfExpertEqualsAdmin() public {
+        vm.prank(admin);
+        vm.expectRevert("Expert and Admin must be different");
+        factory.deployEscrow(
+            pyme,
+            address(token),
+            admin,
+            TOTAL_AMOUNT,
+            milestoneDescriptions,
+            milestoneAmounts,
+            REVISION_PERIOD,
+            PLATFORM_FEE
+        );
+    }
 
     // ============================================
     // FUND TESTS
@@ -20,9 +168,21 @@ contract EscrowTest is Base {
 
         escrow.fund();
 
-        assertEq(uint256(escrow.status()), uint256(EscrowInterface.EscrowStatus.Funded), "Status should be Funded");
-        assertEq(token.balanceOf(pyme), pymeBalanceBefore - TOTAL_AMOUNT, "Pyme balance should decrease");
-        assertEq(token.balanceOf(address(escrow)), escrowBalanceBefore + TOTAL_AMOUNT, "Escrow balance should increase");
+        assertEq(
+            uint256(escrow.status()),
+            uint256(EscrowInterface.EscrowStatus.Funded),
+            "Status should be Funded"
+        );
+        assertEq(
+            token.balanceOf(pyme),
+            pymeBalanceBefore - TOTAL_AMOUNT,
+            "Pyme balance should decrease"
+        );
+        assertEq(
+            token.balanceOf(address(escrow)),
+            escrowBalanceBefore + TOTAL_AMOUNT,
+            "Escrow balance should increase"
+        );
         vm.stopPrank();
     }
 
@@ -68,13 +228,29 @@ contract EscrowTest is Base {
         vm.prank(expert);
         escrow.acceptContract();
 
-        assertEq(uint256(escrow.status()), uint256(EscrowInterface.EscrowStatus.Active), "Status should be Active");
+        assertEq(
+            uint256(escrow.status()),
+            uint256(EscrowInterface.EscrowStatus.Active),
+            "Status should be Active"
+        );
         assertEq(escrow.currentMilestone(), 1, "Current milestone should be 1");
-        assertEq(token.balanceOf(expert), expertBalanceBefore + netPayment, "Expert should receive net payment");
-        assertEq(token.balanceOf(admin), adminBalanceBefore + totalPlatformFee, "Admin should receive total fee");
+        assertEq(
+            token.balanceOf(expert),
+            expertBalanceBefore + netPayment,
+            "Expert should receive net payment"
+        );
+        assertEq(
+            token.balanceOf(admin),
+            adminBalanceBefore + totalPlatformFee,
+            "Admin should receive total fee"
+        );
 
         EscrowInterface.Milestone memory milestone = escrow.getMilestone(0);
-        assertEq(uint256(milestone.status), uint256(EscrowInterface.MilestoneStatus.Approved), "Milestone 0 should be approved");
+        assertEq(
+            uint256(milestone.status),
+            uint256(EscrowInterface.MilestoneStatus.Approved),
+            "Milestone 0 should be approved"
+        );
     }
 
     function testAcceptContract_RevertIfNotExpert() public {
@@ -105,8 +281,16 @@ contract EscrowTest is Base {
         escrow.deliverMilestone();
 
         EscrowInterface.Milestone memory milestone = escrow.getMilestone(1);
-        assertEq(uint256(milestone.status), uint256(EscrowInterface.MilestoneStatus.Delivered), "Milestone should be delivered");
-        assertGt(milestone.deliveryTimestamp, 0, "Delivery timestamp should be set");
+        assertEq(
+            uint256(milestone.status),
+            uint256(EscrowInterface.MilestoneStatus.Delivered),
+            "Milestone should be delivered"
+        );
+        assertGt(
+            milestone.deliveryTimestamp,
+            0,
+            "Delivery timestamp should be set"
+        );
     }
 
     function testDeliverMilestone_RevertIfNotExpert() public {
@@ -152,10 +336,18 @@ contract EscrowTest is Base {
         escrow.approveMilestone();
 
         assertEq(escrow.currentMilestone(), 2, "Current milestone should be 2");
-        assertEq(token.balanceOf(expert), expertBalanceBefore + netPayment, "Expert should receive payment");
+        assertEq(
+            token.balanceOf(expert),
+            expertBalanceBefore + netPayment,
+            "Expert should receive payment"
+        );
 
         EscrowInterface.Milestone memory milestone = escrow.getMilestone(1);
-        assertEq(uint256(milestone.status), uint256(EscrowInterface.MilestoneStatus.Approved), "Milestone should be approved");
+        assertEq(
+            uint256(milestone.status),
+            uint256(EscrowInterface.MilestoneStatus.Approved),
+            "Milestone should be approved"
+        );
     }
 
     function testApproveMilestone_RevertIfNotPyme() public {
@@ -189,7 +381,11 @@ contract EscrowTest is Base {
             escrow.approveMilestone();
         }
 
-        assertEq(uint256(escrow.status()), uint256(EscrowInterface.EscrowStatus.Completed), "Status should be Completed");
+        assertEq(
+            uint256(escrow.status()),
+            uint256(EscrowInterface.EscrowStatus.Completed),
+            "Status should be Completed"
+        );
     }
 
     // ============================================
@@ -206,8 +402,16 @@ contract EscrowTest is Base {
         escrow.rejectMilestone();
 
         EscrowInterface.Milestone memory milestone = escrow.getMilestone(1);
-        assertEq(uint256(milestone.status), uint256(EscrowInterface.MilestoneStatus.InProgress), "Milestone should be in progress");
-        assertEq(milestone.deliveryTimestamp, 0, "Delivery timestamp should be reset");
+        assertEq(
+            uint256(milestone.status),
+            uint256(EscrowInterface.MilestoneStatus.InProgress),
+            "Milestone should be in progress"
+        );
+        assertEq(
+            milestone.deliveryTimestamp,
+            0,
+            "Delivery timestamp should be reset"
+        );
     }
 
     function testRejectMilestone_RevertIfNotPyme() public {
@@ -242,7 +446,11 @@ contract EscrowTest is Base {
         escrow.deliverMilestone();
 
         EscrowInterface.Milestone memory milestone = escrow.getMilestone(1);
-        assertEq(uint256(milestone.status), uint256(EscrowInterface.MilestoneStatus.Delivered), "Milestone should be delivered again");
+        assertEq(
+            uint256(milestone.status),
+            uint256(EscrowInterface.MilestoneStatus.Delivered),
+            "Milestone should be delivered again"
+        );
     }
 
     // ============================================
@@ -258,9 +466,21 @@ contract EscrowTest is Base {
 
         escrow.cancelContract();
 
-        assertEq(uint256(escrow.status()), uint256(EscrowInterface.EscrowStatus.Cancelled), "Status should be Cancelled");
-        assertEq(token.balanceOf(pyme), pymeBalanceBefore + TOTAL_AMOUNT, "Pyme should receive refund");
-        assertEq(token.balanceOf(address(escrow)), 0, "Escrow balance should be 0");
+        assertEq(
+            uint256(escrow.status()),
+            uint256(EscrowInterface.EscrowStatus.Cancelled),
+            "Status should be Cancelled"
+        );
+        assertEq(
+            token.balanceOf(pyme),
+            pymeBalanceBefore + TOTAL_AMOUNT,
+            "Pyme should receive refund"
+        );
+        assertEq(
+            token.balanceOf(address(escrow)),
+            0,
+            "Escrow balance should be 0"
+        );
         vm.stopPrank();
     }
 
@@ -307,10 +527,18 @@ contract EscrowTest is Base {
 
         escrow.checkTacitApproval();
 
-        assertEq(token.balanceOf(expert), expertBalanceBefore + netPayment, "Expert should receive payment");
+        assertEq(
+            token.balanceOf(expert),
+            expertBalanceBefore + netPayment,
+            "Expert should receive payment"
+        );
 
         EscrowInterface.Milestone memory milestone = escrow.getMilestone(1);
-        assertEq(uint256(milestone.status), uint256(EscrowInterface.MilestoneStatus.Approved), "Milestone should be approved");
+        assertEq(
+            uint256(milestone.status),
+            uint256(EscrowInterface.MilestoneStatus.Approved),
+            "Milestone should be approved"
+        );
     }
 
     function testCheckTacitApproval_RevertIfPeriodNotExpired() public {

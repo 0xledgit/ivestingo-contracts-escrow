@@ -3,9 +3,12 @@ pragma solidity ^0.8.30;
 
 import "./interfaces/EscrowInterface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract Escrow is EscrowInterface, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     uint256 private constant ABSOLUTE_MAX_MILESTONES = 1000;
 
     EscrowStatus public status;
@@ -50,10 +53,21 @@ function initialize(
     require(_addressExpert != address(0), "Invalid expert address");
     require(_addressBaseToken != address(0), "Invalid token address");
     require(_addressAdmin != address(0), "Invalid admin address");
+    require(
+        IERC20Metadata(_addressBaseToken).decimals() == 6,
+        "Token must have exactly 6 decimals"
+    );
+    require(_addressPyme != _addressExpert, "Pyme and Expert must be different");
+    require(_addressPyme != _addressAdmin, "Pyme and Admin must be different");
+    require(_addressExpert != _addressAdmin, "Expert and Admin must be different");
     require(_milestoneDescriptions.length == _milestoneAmounts.length, "Mismatched arrays");
     require(_milestoneDescriptions.length > 0, "No milestones");
     require(_milestoneDescriptions.length <= ABSOLUTE_MAX_MILESTONES, "Exceeds max milestones");
     require(_platformFee <= 10000, "Fee too high");
+    require(
+        _totalMilestonesAmount % 10000 == 0,
+        "Total amount must be multiple of 10000"
+    );
 
     addressPyme = _addressPyme;
     addressBaseToken = _addressBaseToken;
@@ -67,6 +81,11 @@ function initialize(
 
     uint256 totalCheck = 0;
     for (uint256 i = 0; i < _milestoneDescriptions.length; i++) {
+        require(
+            _milestoneAmounts[i] % 10000 == 0,
+            "Milestone amount must be multiple of 10000"
+        );
+
         milestoneDescriptions[i] = _milestoneDescriptions[i];
         milestoneAmounts[i] = _milestoneAmounts[i];
         milestoneStatuses[i] = MilestoneStatus.InProgress;
@@ -85,8 +104,7 @@ function fund() public nonReentrant {
     require(msg.sender == addressPyme, "Only pyme");
     require(status == EscrowStatus.Created, "Not in created state");
 
-    bool success = IERC20(addressBaseToken).transferFrom(addressPyme, address(this), totalMilestonesAmount);
-    require(success, "Transfer failed");
+    IERC20(addressBaseToken).safeTransferFrom(addressPyme, address(this), totalMilestonesAmount);
 
     status = EscrowStatus.Funded;
     emit EscrowFunded(addressPyme, totalMilestonesAmount);
@@ -111,11 +129,8 @@ function acceptContract() public nonReentrant {
         status = EscrowStatus.Completed;
     }
 
-    bool feeTransfer = IERC20(addressBaseToken).transfer(addressAdmin, totalPlatformFee);
-    require(feeTransfer, "Fee transfer failed");
-
-    bool advanceTransfer = IERC20(addressBaseToken).transfer(addressExpert, netPayment);
-    require(advanceTransfer, "Advance transfer failed");
+    IERC20(addressBaseToken).safeTransfer(addressAdmin, totalPlatformFee);
+    IERC20(addressBaseToken).safeTransfer(addressExpert, netPayment);
 
     emit EscrowActivated(addressExpert, netPayment, totalPlatformFee);
     emit PaymentReleased(addressExpert, netPayment);
@@ -186,8 +201,7 @@ function _releaseMilestonePayment(uint256 milestoneId, bool isTacit) private {
         currentMilestone++;
     }
 
-    bool success = IERC20(addressBaseToken).transfer(addressExpert, netPayment);
-    require(success, "Payment transfer failed");
+    IERC20(addressBaseToken).safeTransfer(addressExpert, netPayment);
 
     emit MilestoneApproved(milestoneId, netPayment, isTacit);
     emit PaymentReleased(addressExpert, netPayment);
@@ -217,8 +231,7 @@ function cancelContract() public nonReentrant {
 
     status = EscrowStatus.Cancelled;
 
-    bool success = IERC20(addressBaseToken).transfer(addressPyme, refundAmount);
-    require(success, "Refund failed");
+    IERC20(addressBaseToken).safeTransfer(addressPyme, refundAmount);
 
     emit EscrowCancelled(addressPyme, refundAmount);
 }
